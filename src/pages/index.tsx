@@ -3,6 +3,8 @@ import Head from "next/head"
 import React from "react"
 import * as ReactDOM from "react-dom/client"
 
+const range = (n: number): number[] => Array.from(Array(n + 1).keys()).slice(1)
+
 type DraggableProps = {
   children: React.ReactNode
   className?: string
@@ -207,22 +209,9 @@ const CandidateList: React.FC<{
   candidatelist: Set<Item>
   onDragItem: (item: Item) => void
   onUndragItem: () => void
-  onDropItem: () => void
-}> = ({ candidatelist, onDragItem, onUndragItem, onDropItem }) => {
+}> = ({ candidatelist, onDragItem, onUndragItem }) => {
   return (
-    <Droppable
-      className="candidatelist px-1 flex-grow flex flex-row basis-0"
-      onDragLeave={(e) => {
-        e.preventDefault()
-      }}
-      onDragOver={(e) => {
-        e.preventDefault()
-        e.dataTransfer.dropEffect = "move"
-      }}
-      onDrop={() => {
-        onDropItem()
-      }}
-    >
+    <div className="candidatelist-inner px-1 flex flex-row basis-0 flex-wrap">
       {Array.from(candidatelist).map((item) => (
         <DraggableItem
           key={item.label}
@@ -231,7 +220,7 @@ const CandidateList: React.FC<{
           onUndragItem={onUndragItem}
         />
       ))}
-    </Droppable>
+    </div>
   )
 }
 
@@ -375,12 +364,7 @@ const Home: NextPage = () => {
     {
       label: "S",
       colorClass: "bg-indigo-500 text-white",
-      items: new Set([
-        {
-          label: "Vivo",
-          imgSrc: "https://fdn2.gsmarena.com/vv/bigpic/vivo-y16.jpg",
-        },
-      ]),
+      items: new Set([]),
     },
     {
       label: "A",
@@ -414,21 +398,31 @@ const Home: NextPage = () => {
     },
   ])
 
+  React.useEffect(() => {
+    const numImg = new URLSearchParams(location.search).get("numImg")
+    const fetchCandidateItems = (): Promise<Item[]> => {
+      return fetch(`https://picsum.photos/v2/list?limit=${numImg || 25}`)
+        .then((res) => res.json())
+        .then((res: Picsum[]) =>
+          res.map((item: Picsum, index) => ({
+            label: `${item.author} ${index}`,
+            imgSrc: `https://picsum.photos/id/${item.id}/96/96`,
+          }))
+        )
+      // return Promise.resolve(
+      //   range(Number(numImg) || 25).map((i) => ({
+      //     label: `${i}`,
+      //     imgSrc: `https://picsum.photos/seed/${i}/96/96`,
+      //   }))
+      // )
+    }
+    fetchCandidateItems().then((items) => {
+      setCandidatelist(new Set(items))
+    })
+  }, [])
+
   const [candidatelist, setCandidatelist] = React.useState<Set<Item>>(
-    new Set([
-      {
-        label: "Item 1",
-        imgSrc: "https://fdn2.gsmarena.com/vv/bigpic/vivo-iqoo-z6-lite-5g.jpg",
-      },
-      {
-        label: "Item 2",
-        imgSrc: "https://fdn2.gsmarena.com/vv/bigpic/realme-c30s.jpg",
-      },
-      {
-        label: "Item 3",
-        imgSrc: "https://fdn2.gsmarena.com/vv/bigpic/oppo-k10x-.jpg",
-      },
-    ])
+    new Set([])
   )
 
   const [draggedCandidateItem, setDraggedCandidateItem] =
@@ -561,12 +555,25 @@ const Home: NextPage = () => {
 
       <Layout>
         <Toolbar resetList={resetList} />
-        <CandidateList
-          candidatelist={candidatelist}
-          onDragItem={dragCandidateItem}
-          onUndragItem={undragCandidateItem}
-          onDropItem={handleDropOnCandidateList}
-        />
+        <Droppable
+          className="w-80"
+          onDragLeave={(e) => {
+            e.preventDefault()
+          }}
+          onDragOver={(e) => {
+            e.preventDefault()
+            e.dataTransfer.dropEffect = "move"
+          }}
+          onDrop={() => {
+            handleDropOnCandidateList()
+          }}
+        >
+          <CandidateList
+            candidatelist={candidatelist}
+            onDragItem={dragCandidateItem}
+            onUndragItem={undragCandidateItem}
+          />
+        </Droppable>
         <Separator />
         <TierList
           tierlist={tierlist}
@@ -580,3 +587,12 @@ const Home: NextPage = () => {
 }
 
 export default Home
+
+type Picsum = {
+  id: string
+  author: string
+  width: number
+  height: number
+  url: string
+  download_url: string
+}
