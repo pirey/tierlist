@@ -207,9 +207,22 @@ const CandidateList: React.FC<{
   candidatelist: Set<Item>
   onDragItem: (item: Item) => void
   onUndragItem: () => void
-}> = ({ candidatelist, onDragItem, onUndragItem }) => {
+  onDropItem: () => void
+}> = ({ candidatelist, onDragItem, onUndragItem, onDropItem }) => {
   return (
-    <div className="candidatelist px-1 flex-grow flex flex-row basis-0">
+    <Droppable
+      className="candidatelist px-1 flex-grow flex flex-row basis-0"
+      onDragLeave={(e) => {
+        e.preventDefault()
+      }}
+      onDragOver={(e) => {
+        e.preventDefault()
+        e.dataTransfer.dropEffect = "move"
+      }}
+      onDrop={() => {
+        onDropItem()
+      }}
+    >
       {Array.from(candidatelist).map((item) => (
         <DraggableItem
           key={item.label}
@@ -218,7 +231,7 @@ const CandidateList: React.FC<{
           onUndragItem={onUndragItem}
         />
       ))}
-    </div>
+    </Droppable>
   )
 }
 
@@ -228,7 +241,10 @@ const Separator = () => {
 
 const SettingButton = () => {
   return (
-    <i className="cursor-pointer p-2 rounded hover:bg-slate-200">
+    <i
+      title="Setting"
+      className="cursor-pointer p-2 rounded hover:bg-slate-200"
+    >
       <svg
         xmlns="http://www.w3.org/2000/svg"
         fill="none"
@@ -254,7 +270,10 @@ const SettingButton = () => {
 
 const DownloadButton = () => {
   return (
-    <i className="cursor-pointer p-2 rounded hover:bg-slate-200">
+    <i
+      title="Download"
+      className="cursor-pointer p-2 rounded hover:bg-slate-200"
+    >
       <svg
         xmlns="http://www.w3.org/2000/svg"
         fill="none"
@@ -273,9 +292,13 @@ const DownloadButton = () => {
   )
 }
 
-const ResetButton = () => {
+const ResetButton: React.FC<{ onClick?: () => void }> = ({ onClick }) => {
   return (
-    <i className="cursor-pointer p-2 rounded hover:bg-slate-200">
+    <i
+      title="Reset"
+      onClick={onClick}
+      className="cursor-pointer p-2 rounded hover:bg-slate-200"
+    >
       <svg
         xmlns="http://www.w3.org/2000/svg"
         fill="none"
@@ -297,6 +320,7 @@ const ResetButton = () => {
 const GithubButton = () => {
   return (
     <a
+      title="Github Repo"
       href="https://github.com/pirey/tierlist"
       target="__blank"
       rel="noreferrer noopener"
@@ -321,14 +345,15 @@ const GithubButton = () => {
 }
 
 const Toolbar: React.FC<{
+  resetList?: () => void
   selectTemplate?: () => void
   openSetting?: () => void
-}> = ({ selectTemplate, openSetting }) => {
+}> = ({ resetList, selectTemplate, openSetting }) => {
   return (
     <div className="toolbar flex flex-col items-center w-14 py-2">
       <SettingButton />
       <div className="pb-2"></div>
-      <ResetButton />
+      <ResetButton onClick={resetList} />
       <div className="pb-2"></div>
       <DownloadButton />
       <div className="pb-2"></div>
@@ -474,13 +499,56 @@ const Home: NextPage = () => {
     disposeDragImage()
   }
 
-  const handleDropItem = (tier: Tier) => {
+  const handleDropOnTierList = (tier: Tier) => {
     if (draggedCandidateItem) {
       moveCandidateItemToTier(tier, draggedCandidateItem)
     }
     if (draggedTierItem) {
       moveTierItemToAnotherTier(tier, draggedTierItem)
     }
+  }
+
+  const addItemToCandidate = (item: Item) => {
+    setCandidatelist(new Set([...Array.from(candidatelist), item]))
+  }
+
+  const handleDropOnCandidateList = () => {
+    if (draggedCandidateItem) {
+      // do nothing
+    }
+    if (draggedTierItem) {
+      const item = draggedTierItem
+      const originTier = tierlist.find((t) =>
+        Array.from(t.items).find((i) => i.label === item.label)
+      )
+      if (!originTier) return
+      setTierlist(
+        tierlist.map((t) =>
+          t.label === originTier.label
+            ? removeItemFromTier(originTier, item)
+            : t
+        )
+      )
+      addItemToCandidate(item)
+      setDraggedTierItem(null)
+      disposeDragImage()
+    }
+  }
+
+  const resetList = () => {
+    const itemsInTierlist: Item[] = tierlist.reduce<Item[]>((result, tier) => {
+      return [...result, ...Array.from(tier.items)]
+    }, [])
+    const tierlistWithoutItems = tierlist.map((tier) => {
+      return {
+        ...tier,
+        items: new Set([]),
+      }
+    })
+    setTierlist(tierlistWithoutItems)
+    setCandidatelist(
+      new Set([...Array.from(candidatelist), ...itemsInTierlist])
+    )
   }
 
   return (
@@ -492,16 +560,17 @@ const Home: NextPage = () => {
       </Head>
 
       <Layout>
-        <Toolbar />
+        <Toolbar resetList={resetList} />
         <CandidateList
           candidatelist={candidatelist}
           onDragItem={dragCandidateItem}
           onUndragItem={undragCandidateItem}
+          onDropItem={handleDropOnCandidateList}
         />
         <Separator />
         <TierList
           tierlist={tierlist}
-          onDropItem={handleDropItem}
+          onDropItem={handleDropOnTierList}
           onDragItem={dragTierItem}
           onUndragItem={undragTierItem}
         />
