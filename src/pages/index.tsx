@@ -3,6 +3,67 @@ import Head from "next/head"
 import React from "react"
 import * as ReactDOM from "react-dom/client"
 
+type DraggableProps = {
+  children: React.ReactNode
+  className?: string
+  onDragStart?: React.DragEventHandler
+  onDragEnd?: React.DragEventHandler
+}
+export const Draggable: React.FC<DraggableProps> = ({
+  children,
+  className = "",
+  onDragStart,
+  onDragEnd,
+}) => {
+  return (
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      className={`draggable ${className}`}
+    >
+      {children}
+    </div>
+  )
+}
+
+export const Droppable: React.FC<{
+  onDragLeave: React.DragEventHandler
+  onDragOver: React.DragEventHandler
+  onDrop: React.DragEventHandler
+  children: React.ReactNode
+  className?: string
+}> = ({ onDragLeave, onDragOver, onDrop, children, className = "" }) => {
+  // the drag event will be fired for each child inside the droppable parent
+  // this counter is needed to properly tell that the user has left the parent
+  const [dragEnterCounter, setDragEnterCounter] = React.useState<number>(0)
+
+  return (
+    <div
+      className={`droppable ${className}`}
+      onDragEnter={() => {
+        setDragEnterCounter(dragEnterCounter + 1)
+      }}
+      onDragLeave={(e) => {
+        const nextDragEnterCounter = dragEnterCounter - 1
+        setDragEnterCounter(nextDragEnterCounter)
+
+        if (nextDragEnterCounter <= 0) {
+          onDragLeave(e)
+        }
+      }}
+      onDragOver={onDragOver}
+      onDrop={(e) => {
+        // reset the counter since the drag event has "finished"
+        setDragEnterCounter(0)
+        onDrop(e)
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
 type Item = {
   label?: string
   imgSrc?: string
@@ -17,7 +78,11 @@ type Tier = {
 }
 
 // TODO: weird border when droppable
-const Tier: React.FC<{ tier: Tier }> = ({ tier }) => {
+const Tier: React.FC<{
+  tier: Tier
+  onDragItem: (item: Item) => void
+  onUndragItem: () => void
+}> = ({ tier, onDragItem, onUndragItem }) => {
   return (
     <div className="tier flex flex-row">
       <div
@@ -27,7 +92,12 @@ const Tier: React.FC<{ tier: Tier }> = ({ tier }) => {
       </div>
       <div className="flex-grow flex flex-row box-border px-1 bg-slate-300 border-b border-b-slate-400">
         {Array.from(tier.items).map((item) => (
-          <Item key={item.label} item={item} />
+          <DraggableItem
+            key={item.label}
+            item={item}
+            onDragItem={onDragItem}
+            onUndragItem={onUndragItem}
+          />
         ))}
       </div>
     </div>
@@ -36,27 +106,26 @@ const Tier: React.FC<{ tier: Tier }> = ({ tier }) => {
 
 const DroppableTier: React.FC<{
   tier: Tier
-  onDropItem?: (tier: Tier) => void
-}> = ({ tier, onDropItem }) => {
+  onDropItem: (tier: Tier) => void
+  onDragItem: (item: Item) => void
+  onUndragItem: () => void
+}> = ({ tier, onDropItem, onDragItem, onUndragItem }) => {
   return (
     <Droppable
       className="border-0"
       onDragLeave={(e) => {
         e.preventDefault()
-        console.log("leave")
       }}
       onDragOver={(e) => {
         e.preventDefault()
         e.dataTransfer.dropEffect = "move"
-        console.log("over")
       }}
       onDrop={(e) => {
         e.preventDefault()
-        onDropItem?.(tier)
-        console.log("drop")
+        onDropItem(tier)
       }}
     >
-      <Tier tier={tier} />
+      <Tier tier={tier} onDragItem={onDragItem} onUndragItem={onUndragItem} />
     </Droppable>
   )
 }
@@ -64,11 +133,19 @@ const DroppableTier: React.FC<{
 const TierList: React.FC<{
   tierlist: Tier[]
   onDropItem: (tier: Tier) => void
-}> = ({ tierlist, onDropItem }) => {
+  onDragItem: (item: Item) => void
+  onUndragItem: () => void
+}> = ({ tierlist, onDropItem, onDragItem, onUndragItem }) => {
   return (
     <div className="tierlist flex flex-col flex-grow basis-0">
       {tierlist.map((tier) => (
-        <DroppableTier key={tier.label} tier={tier} onDropItem={onDropItem} />
+        <DroppableTier
+          key={tier.label}
+          tier={tier}
+          onDropItem={onDropItem}
+          onDragItem={onDragItem}
+          onUndragItem={onUndragItem}
+        />
       ))}
     </div>
   )
@@ -104,8 +181,8 @@ const disposeDragImage = () => {
 
 const DraggableItem: React.FC<{
   item: Item
-  onDragItem?: (item: Item) => void
-  onUndragItem?: () => void
+  onDragItem: (item: Item) => void
+  onUndragItem: () => void
 }> = ({ item, onDragItem, onUndragItem }) => {
   return (
     <Draggable
@@ -114,11 +191,11 @@ const DraggableItem: React.FC<{
       onDragStart={(e) => {
         const dragImage = createDisposableDragImage(item)
         e.dataTransfer.setDragImage(dragImage, 0, 0)
-        onDragItem?.(item)
+        onDragItem(item)
       }}
       onDragEnd={() => {
         disposeDragImage()
-        onUndragItem?.()
+        onUndragItem()
       }}
     >
       <Item item={item} />
@@ -128,8 +205,8 @@ const DraggableItem: React.FC<{
 
 const CandidateList: React.FC<{
   candidatelist: Set<Item>
-  onDragItem?: (item: Item) => void
-  onUndragItem?: () => void
+  onDragItem: (item: Item) => void
+  onUndragItem: () => void
 }> = ({ candidatelist, onDragItem, onUndragItem }) => {
   return (
     <div className="candidatelist px-1 flex-grow flex flex-row basis-0">
@@ -329,14 +406,26 @@ const Home: NextPage = () => {
     ])
   )
 
-  const [draggedItem, setDraggedItem] = React.useState<Item | null>(null)
+  const [draggedCandidateItem, setDraggedCandidateItem] =
+    React.useState<Item | null>(null)
+  const [draggedTierItem, setDraggedTierItem] = React.useState<Item | null>(
+    null
+  )
 
-  const dragItem = (item: Item) => {
-    setDraggedItem(item)
+  const dragCandidateItem = (item: Item) => {
+    setDraggedCandidateItem(item)
   }
 
-  const undragItem = () => {
-    setDraggedItem(null)
+  const undragCandidateItem = () => {
+    setDraggedCandidateItem(null)
+  }
+
+  const dragTierItem = (item: Item) => {
+    setDraggedTierItem(item)
+  }
+
+  const undragTierItem = () => {
+    setDraggedTierItem(null)
   }
 
   const removeItemFromCandidatelist = (item: Item) => {
@@ -344,21 +433,54 @@ const Home: NextPage = () => {
     setCandidatelist(candidatelist)
   }
 
+  const removeItemFromTier = (tierOrigin: Tier, item: Item) => {
+    const newItems = new Set(
+      Array.from(tierOrigin.items).filter((i) => i.label !== item.label)
+    )
+
+    return {
+      ...tierOrigin,
+      items: newItems,
+    }
+  }
+
   const addItemToTier = (tier: Tier, item: Item) => ({
     ...tier,
     items: new Set([...Array.from(tier.items), item]),
   })
 
-  const addItemToTierlist = (tier: Tier) => {
-    if (!draggedItem) return
+  const moveCandidateItemToTier = (tier: Tier, item: Item) => {
     setTierlist(
-      tierlist.map((t) =>
-        t.label === tier.label ? addItemToTier(t, draggedItem) : t
-      )
+      tierlist.map((t) => (t.label === tier.label ? addItemToTier(t, item) : t))
     )
-    removeItemFromCandidatelist(draggedItem)
-    setDraggedItem(null)
+    removeItemFromCandidatelist(item)
+    setDraggedCandidateItem(null)
     disposeDragImage()
+  }
+
+  const moveTierItemToAnotherTier = (targetTier: Tier, item: Item) => {
+    const originTier = tierlist.find((t) =>
+      Array.from(t.items).find((i) => i.label === item.label)
+    )
+    if (!originTier) return
+    const newTierlist = tierlist
+      .map((t) =>
+        t.label === originTier.label ? removeItemFromTier(originTier, item) : t
+      )
+      .map((t) => (t.label === targetTier.label ? addItemToTier(t, item) : t))
+
+    setTierlist(newTierlist)
+    setDraggedTierItem(null)
+    disposeDragImage()
+  }
+
+  const handleDropItem = (tier: Tier) => {
+    if (draggedCandidateItem) {
+      moveCandidateItemToTier(tier, draggedCandidateItem)
+    }
+    if (draggedTierItem) {
+      moveTierItemToAnotherTier(tier, draggedTierItem)
+    }
   }
 
   return (
@@ -373,75 +495,19 @@ const Home: NextPage = () => {
         <Toolbar />
         <CandidateList
           candidatelist={candidatelist}
-          onDragItem={dragItem}
-          onUndragItem={undragItem}
+          onDragItem={dragCandidateItem}
+          onUndragItem={undragCandidateItem}
         />
         <Separator />
-        <TierList tierlist={tierlist} onDropItem={addItemToTierlist} />
+        <TierList
+          tierlist={tierlist}
+          onDropItem={handleDropItem}
+          onDragItem={dragTierItem}
+          onUndragItem={undragTierItem}
+        />
       </Layout>
     </>
   )
 }
 
 export default Home
-
-type DraggableProps = {
-  children: React.ReactNode
-  className?: string
-  onDragStart?: React.DragEventHandler
-  onDragEnd?: React.DragEventHandler
-}
-export const Draggable: React.FC<DraggableProps> = ({
-  children,
-  className = "",
-  onDragStart,
-  onDragEnd,
-}) => {
-  return (
-    <div
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      className={`draggable ${className}`}
-    >
-      {children}
-    </div>
-  )
-}
-
-export const Droppable: React.FC<{
-  onDragLeave: React.DragEventHandler
-  onDragOver: React.DragEventHandler
-  onDrop: React.DragEventHandler
-  children: React.ReactNode
-  className?: string
-}> = ({ onDragLeave, onDragOver, onDrop, children, className = "" }) => {
-  // the drag event will be fired for each child inside the droppable parent
-  // this counter is needed to properly tell that the user has left the parent
-  const [dragEnterCounter, setDragEnterCounter] = React.useState<number>(0)
-
-  return (
-    <div
-      className={`droppable ${className}`}
-      onDragEnter={() => {
-        setDragEnterCounter(dragEnterCounter + 1)
-      }}
-      onDragLeave={(e) => {
-        const nextDragEnterCounter = dragEnterCounter - 1
-        setDragEnterCounter(nextDragEnterCounter)
-
-        if (nextDragEnterCounter <= 0) {
-          onDragLeave(e)
-        }
-      }}
-      onDragOver={onDragOver}
-      onDrop={(e) => {
-        // reset the counter since the drag event has "finished"
-        setDragEnterCounter(0)
-        onDrop(e)
-      }}
-    >
-      {children}
-    </div>
-  )
-}
